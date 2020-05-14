@@ -10,6 +10,7 @@
 	"supports": {
 		"customClassName": false,
 		"className": false,
-		"html": false
+		"html": false,
+		"lightBlockWrapper": true
 	}
 }
