@@ -21,6 +21,15 @@
 	border: none;
 }
 
+.block-library-heading__heading-level-dropdown__help {
+	margin-left: $grid-unit-20;
+	margin-right: $grid-unit-20;
+
+	// Override default paragraph margin to optically balance spacing between it
+	// and the toolbar above.
+	margin-top: 0;
+}
+
 .block-library-heading__heading-level-warning {
 	margin: 0;
 }

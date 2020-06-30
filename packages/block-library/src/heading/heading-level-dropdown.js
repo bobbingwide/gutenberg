@@ -3,10 +3,12 @@
  */
 import {
 	Dropdown,
+	ExternalLink,
 	Toolbar,
 	ToolbarButton,
 	ToolbarGroup,
 } from '@wordpress/components';
+import { useInstanceId } from '@wordpress/compose';
 import { __, sprintf } from '@wordpress/i18n';
 import { DOWN } from '@wordpress/keycodes';
 
@@ -49,6 +51,8 @@ export default function HeadingLevelDropdown( {
 	selectedLevel,
 	onChange,
 } ) {
+	const instanceId = useInstanceId( HeadingLevelDropdown );
+
 	const getLevelValidity = useHeadingLevelValidator( clientId );
 
 	const { levelMayBeInvalid: selectedLevelMayBeInvalid } = getLevelValidity(
@@ -91,34 +95,51 @@ export default function HeadingLevelDropdown( {
 							isCollapsed={ false }
 							controls={ HEADING_LEVELS.map( ( targetLevel ) => {
 								const isActive = targetLevel === selectedLevel;
+								const levelMayBeInvalid = getLevelValidity(
+									targetLevel
+								).levelMayBeInvalid;
+
 								return {
 									icon: (
 										<HeadingLevelIcon
 											level={ targetLevel }
 											isPressed={ isActive }
-											isDiscouraged={
-												getLevelValidity( targetLevel )
-													.levelMayBeInvalid
-											}
+											isDiscouraged={ levelMayBeInvalid }
 										/>
 									),
-									title: sprintf(
-										// translators: %s: heading level e.g: "1", "2", "3"
-										__( 'Heading %d' ),
-										targetLevel
-									),
+									title: levelMayBeInvalid
+										? sprintf(
+												// translators: %d: heading level e.g: "1", "2", "3"
+												__(
+													'Heading %d (may be invalid)'
+												),
+												targetLevel
+										  )
+										: sprintf(
+												// translators: %d: heading level e.g: "1", "2", "3"
+												__( 'Heading %d' ),
+												targetLevel
+										  ),
 									isActive,
 									onClick() {
 										onChange( targetLevel );
 									},
 								};
 							} ) }
+							aria-describedby={ `block-library-heading__heading-level-dropdown__help-${ instanceId }` }
 						/>
 					</Toolbar>
-					<HeadingLevelWarning
-						levelMayBeInvalid={ selectedLevelMayBeInvalid }
-						selectedLevel={ selectedLevel }
-					/>
+					<p
+						id={ `block-library-heading__heading-level-dropdown__help-${ instanceId }` }
+						className="block-library-heading__heading-level-dropdown__help"
+					>
+						<ExternalLink href="https://www.w3.org/WAI/tutorials/page-structure/headings/">
+							{ __( 'Learn about heading levels.' ) }
+						</ExternalLink>
+					</p>
+					{ selectedLevelMayBeInvalid && (
+						<HeadingLevelWarning selectedLevel={ selectedLevel } />
+					) }
 				</>
 			) }
 		/>

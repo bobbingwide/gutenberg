@@ -2,40 +2,26 @@
  * WordPress dependencies
  */
 import { speak } from '@wordpress/a11y';
-import { ExternalLink, Notice } from '@wordpress/components';
-import { createInterpolateElement, useEffect } from '@wordpress/element';
+import { Notice } from '@wordpress/components';
+import { useEffect } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
-const INVALID_LEVEL_MESSAGE = createInterpolateElement(
-	__(
-		'The chosen heading level may be invalid. <ExternalLink>Use proper heading levels to organize your content for visitors and search engines.</ExternalLink> See the content structure tool for more info.'
-	),
-	{
-		ExternalLink: (
-			<ExternalLink href="https://www.w3.org/WAI/tutorials/page-structure/headings/" />
-		),
-	}
+const INVALID_LEVEL_MESSAGE = __(
+	'The chosen heading level may be invalid. See the content structure tool for more info.'
 );
 
 const INVALID_LEVEL_MESSAGE_SPOKEN = __(
 	'The chosen heading level may be invalid. Use proper heading levels to organize your content for visitors and search engines. See the content structure tool for more info.'
 );
 
-export default function HeadingLevelWarning( {
-	selectedLevel,
-	levelMayBeInvalid,
-} ) {
+export default function HeadingLevelWarning( { selectedLevel } ) {
 	// For accessibility, announce the invalid heading level to screen readers.
 	// The selectedLevel value is included in the dependency array so that the
 	// message will be replayed if a new level is selected, but the new level is
 	// still invalid.
 	useEffect( () => {
-		if ( levelMayBeInvalid ) speak( INVALID_LEVEL_MESSAGE_SPOKEN );
-	}, [ selectedLevel, levelMayBeInvalid ] );
-
-	if ( ! levelMayBeInvalid ) {
-		return null;
-	}
+		speak( INVALID_LEVEL_MESSAGE_SPOKEN );
+	}, [ selectedLevel ] );
 
 	return (
 		<Notice
