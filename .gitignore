@@ -12,12 +12,13 @@ gutenberg.zip
 phpcs.xml
 yarn.lock
 /wordpress
+/artifacts
 
 playground/dist
 .cache
 *.tsbuildinfo
 
-# Report generated from jest-junit
+# Report generated from tests
 test/native/junit.xml
 
 # Local overrides

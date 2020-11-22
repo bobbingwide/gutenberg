@@ -25,6 +25,7 @@ import {
 	MENU_TEMPLATES_PAGES,
 	MENU_TEMPLATES_POSTS,
 	TEMPLATES_GENERAL,
+	TEMPLATES_STATUSES,
 } from '../constants';
 import TemplatesAllMenu from './templates-all';
 import NewTemplateDropdown from '../new-template-dropdown';
@@ -34,7 +35,7 @@ export default function TemplatesMenu() {
 	const templates = useSelect(
 		( select ) =>
 			select( 'core' ).getEntityRecords( 'postType', 'wp_template', {
-				status: [ 'publish', 'auto-draft' ],
+				status: TEMPLATES_STATUSES,
 				per_page: -1,
 			} ),
 		[]
@@ -51,6 +52,12 @@ export default function TemplatesMenu() {
 			titleAction={ <NewTemplateDropdown /> }
 			parentMenu={ MENU_ROOT }
 		>
+			{ map( generalTemplates, ( template ) => (
+				<TemplateNavigationItem
+					item={ template }
+					key={ `wp_template-${ template.id }` }
+				/>
+			) ) }
 			<NavigationItem
 				navigateToMenu={ MENU_TEMPLATES_ALL }
 				title={ _x( 'All', 'all templates' ) }
@@ -63,18 +70,8 @@ export default function TemplatesMenu() {
 				navigateToMenu={ MENU_TEMPLATES_POSTS }
 				title={ __( 'Posts' ) }
 			/>
-
-			{ map( generalTemplates, ( template ) => (
-				<TemplateNavigationItem
-					item={ template }
-					key={ `wp_template-${ template.id }` }
-				/>
-			) ) }
-
 			<TemplatesPostsMenu templates={ templates } />
-
 			<TemplatesPagesMenu templates={ templates } />
-
 			<TemplatesAllMenu templates={ templates } />
 		</NavigationMenu>
 	);
