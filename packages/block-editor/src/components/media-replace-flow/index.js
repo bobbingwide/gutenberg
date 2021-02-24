@@ -22,6 +22,7 @@ import { withDispatch, useSelect } from '@wordpress/data';
 import { DOWN, TAB, ESCAPE } from '@wordpress/keycodes';
 import { compose } from '@wordpress/compose';
 import { upload, media as mediaIcon } from '@wordpress/icons';
+import { store as noticesStore } from '@wordpress/notices';
 
 /**
  * Internal dependencies
@@ -29,6 +30,7 @@ import { upload, media as mediaIcon } from '@wordpress/icons';
 import MediaUpload from '../media-upload';
 import MediaUploadCheck from '../media-upload/check';
 import LinkControl from '../link-control';
+import { store as blockEditorStore } from '../../store';
 
 const MediaReplaceFlow = ( {
 	mediaURL,
@@ -44,7 +46,7 @@ const MediaReplaceFlow = ( {
 } ) => {
 	const [ mediaURLValue, setMediaURLValue ] = useState( mediaURL );
 	const mediaUpload = useSelect( ( select ) => {
-		return select( 'core/block-editor' ).getSettings().mediaUpload;
+		return select( blockEditorStore ).getSettings().mediaUpload;
 	}, [] );
 	const editMediaButtonRef = createRef();
 	const errorNoticeID = uniqueId(
@@ -205,7 +207,7 @@ const MediaReplaceFlow = ( {
 
 export default compose( [
 	withDispatch( ( dispatch ) => {
-		const { createNotice, removeNotice } = dispatch( 'core/notices' );
+		const { createNotice, removeNotice } = dispatch( noticesStore );
 		return {
 			createNotice,
 			removeNotice,

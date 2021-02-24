@@ -1,6 +1,7 @@
 /**
  * WordPress dependencies
  */
+import { store as blocksStore } from '@wordpress/blocks';
 import { __ } from '@wordpress/i18n';
 import {
 	DropdownMenu,
@@ -15,15 +16,16 @@ import { chevronDown } from '@wordpress/icons';
  * Internal dependencies
  */
 import { __experimentalGetMatchingVariation as getMatchingVariation } from '../../utils';
+import { store as blockEditorStore } from '../../store';
 
 function __experimentalBlockVariationTransforms( { blockClientId } ) {
 	const [ selectedValue, setSelectedValue ] = useState();
-	const { updateBlockAttributes } = useDispatch( 'core/block-editor' );
+	const { updateBlockAttributes } = useDispatch( blockEditorStore );
 	const { variations, blockAttributes } = useSelect(
 		( select ) => {
-			const { getBlockVariations } = select( 'core/blocks' );
+			const { getBlockVariations } = select( blocksStore );
 			const { getBlockName, getBlockAttributes } = select(
-				'core/block-editor'
+				blockEditorStore
 			);
 			const blockName = blockClientId && getBlockName( blockClientId );
 			return {

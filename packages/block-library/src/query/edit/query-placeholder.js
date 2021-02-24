@@ -6,8 +6,12 @@ import {
 	useBlockProps,
 	__experimentalBlockVariationPicker,
 	__experimentalGetMatchingVariation as getMatchingVariation,
+	store as blockEditorStore,
 } from '@wordpress/block-editor';
-import { createBlocksFromInnerBlocksTemplate } from '@wordpress/blocks';
+import {
+	createBlocksFromInnerBlocksTemplate,
+	store as blocksStore,
+} from '@wordpress/blocks';
 
 const QueryPlaceholder = ( { clientId, name, attributes, setAttributes } ) => {
 	const {
@@ -21,7 +25,7 @@ const QueryPlaceholder = ( { clientId, name, attributes, setAttributes } ) => {
 				getBlockVariations,
 				getBlockType,
 				getDefaultBlockVariation,
-			} = select( 'core/blocks' );
+			} = select( blocksStore );
 
 			return {
 				blockType: getBlockType( name ),
@@ -32,7 +36,7 @@ const QueryPlaceholder = ( { clientId, name, attributes, setAttributes } ) => {
 		},
 		[ name ]
 	);
-	const { replaceInnerBlocks } = useDispatch( 'core/block-editor' );
+	const { replaceInnerBlocks } = useDispatch( blockEditorStore );
 	const blockProps = useBlockProps();
 	const matchingVariation = getMatchingVariation( attributes, allVariations );
 	const icon = matchingVariation?.icon || blockType?.icon?.src;

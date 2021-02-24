@@ -1,75 +1,100 @@
 /**
  * External dependencies
  */
-import { get, find, camelCase, kebabCase, isString } from 'lodash';
+import { get, find, forEach, camelCase, isString } from 'lodash';
 /**
  * WordPress dependencies
  */
 import { useSelect } from '@wordpress/data';
+/**
+ * Internal dependencies
+ */
+import { store as editSiteStore } from '../../store';
 
 /* Supporting data */
-export const GLOBAL_CONTEXT_NAME = 'global';
-export const GLOBAL_CONTEXT_SELECTOR = ':root';
-export const GLOBAL_CONTEXT = {
-	[ GLOBAL_CONTEXT_NAME ]: {
-		selector: GLOBAL_CONTEXT_SELECTOR,
-		supports: [
-			'--wp--style--color--link',
-			'background',
-			'backgroundColor',
-			'color',
-			'fontFamily',
-			'fontSize',
-			'fontStyle',
-			'fontWeight',
-			'lineHeight',
-			'textDecoration',
-			'textTransform',
+export const ALL_BLOCKS_NAME = 'defaults';
+export const ALL_BLOCKS_SELECTOR = ':root';
+export const ROOT_BLOCK_NAME = 'root';
+export const ROOT_BLOCK_SELECTOR = ':root';
+export const ROOT_BLOCK_SUPPORTS = [
+	'--wp--style--color--link',
+	'background',
+	'backgroundColor',
+	'color',
+	'fontFamily',
+	'fontSize',
+	'fontStyle',
+	'fontWeight',
+	'lineHeight',
+	'textDecoration',
+	'textTransform',
+];
+
+export const PRESET_METADATA = [
+	{
+		path: [ 'color', 'palette' ],
+		valueKey: 'color',
+		cssVarInfix: 'color',
+		classes: [
+			{ classSuffix: 'color', propertyName: 'color' },
+			{
+				classSuffix: 'background-color',
+				propertyName: 'background-color',
+			},
 		],
 	},
-};
+	{
+		path: [ 'color', 'gradients' ],
+		valueKey: 'gradient',
+		cssVarInfix: 'gradient',
+		classes: [
+			{
+				classSuffix: 'gradient-background',
+				propertyName: 'background',
+			},
+		],
+	},
+	{
+		path: [ 'typography', 'fontSizes' ],
+		valueKey: 'size',
+		cssVarInfix: 'font-size',
+		classes: [ { classSuffix: 'font-size', propertyName: 'font-size' } ],
+	},
+	{
+		path: [ 'typography', 'fontFamilies' ],
+		valueKey: 'fontFamily',
+		cssVarInfix: 'font-family',
+		classes: [],
+	},
+];
 
-export const PRESET_CATEGORIES = {
-	color: { path: [ 'color', 'palette' ], key: 'color' },
-	gradient: { path: [ 'color', 'gradients' ], key: 'gradient' },
-	fontSize: { path: [ 'typography', 'fontSizes' ], key: 'size' },
-	fontFamily: { path: [ 'typography', 'fontFamilies' ], key: 'fontFamily' },
-	fontStyle: { path: [ 'typography', 'fontStyles' ], key: 'slug' },
-	fontWeight: { path: [ 'typography', 'fontWeights' ], key: 'slug' },
-	textDecoration: { path: [ 'typography', 'textDecorations' ], key: 'value' },
-	textTransform: { path: [ 'typography', 'textTransforms' ], key: 'slug' },
-};
-export const PRESET_CLASSES = {
-	color: { ...PRESET_CATEGORIES.color, property: 'color' },
-	'background-color': {
-		...PRESET_CATEGORIES.color,
-		property: 'background-color',
-	},
-	'gradient-background': {
-		...PRESET_CATEGORIES.gradient,
-		property: 'background',
-	},
-	'font-size': {
-		...PRESET_CATEGORIES.fontSize,
-		property: 'font-size',
-	},
-};
-
-const STYLE_PROPERTIES_TO_PRESETS = {
+const STYLE_PROPERTIES_TO_CSS_VAR_INFIX = {
 	backgroundColor: 'color',
 	LINK_COLOR: 'color',
 	background: 'gradient',
 };
 
+function getPresetMetadataFromStyleProperty( styleProperty ) {
+	if ( ! getPresetMetadataFromStyleProperty.MAP ) {
+		getPresetMetadataFromStyleProperty.MAP = {};
+		PRESET_METADATA.forEach( ( { cssVarInfix }, index ) => {
+			getPresetMetadataFromStyleProperty.MAP[ camelCase( cssVarInfix ) ] =
+				PRESET_METADATA[ index ];
+		} );
+		forEach( STYLE_PROPERTIES_TO_CSS_VAR_INFIX, ( value, key ) => {
+			getPresetMetadataFromStyleProperty.MAP[ key ] =
+				getPresetMetadataFromStyleProperty.MAP[ value ];
+		} );
+	}
+	return getPresetMetadataFromStyleProperty.MAP[ styleProperty ];
+}
+
 export const LINK_COLOR = '--wp--style--color--link';
 export const LINK_COLOR_DECLARATION = `a { color: var(${ LINK_COLOR }, #00e); }`;
 
-export function useEditorFeature(
-	featurePath,
-	blockName = GLOBAL_CONTEXT_NAME
-) {
+export function useEditorFeature( featurePath, blockName = ALL_BLOCKS_NAME ) {
 	const settings = useSelect( ( select ) => {
-		return select( 'core/edit-site' ).getSettings();
+		return select( editSiteStore ).getSettings();
 	} );
 	return (
 		get(
@@ -78,7 +103,7 @@ export function useEditorFeature(
 		) ??
 		get(
 			settings,
-			`__experimentalFeatures.${ GLOBAL_CONTEXT_NAME }.${ featurePath }`
+			`__experimentalFeatures.${ ALL_BLOCKS_NAME }.${ featurePath }`
 		)
 	);
 }
@@ -87,26 +112,21 @@ export function getPresetVariable( styles, blockName, propertyName, value ) {
 	if ( ! value ) {
 		return value;
 	}
-	const presetCategory =
-		STYLE_PROPERTIES_TO_PRESETS[ propertyName ] || propertyName;
-	if ( ! presetCategory ) {
-		return value;
-	}
-	const presetData = PRESET_CATEGORIES[ presetCategory ];
+	const presetData = getPresetMetadataFromStyleProperty( propertyName );
 	if ( ! presetData ) {
 		return value;
 	}
-	const { key, path } = presetData;
+	const { valueKey, path, cssVarInfix } = presetData;
 	const presets =
-		get( styles, [ blockName, 'settings', ...path ] ) ??
-		get( styles, [ GLOBAL_CONTEXT, 'settings', ...path ] );
+		get( styles, [ blockName, ...path ] ) ??
+		get( styles, [ ALL_BLOCKS_NAME, ...path ] );
 	const presetObject = find( presets, ( preset ) => {
-		return preset[ key ] === value;
+		return preset[ valueKey ] === value;
 	} );
 	if ( ! presetObject ) {
 		return value;
 	}
-	return `var:preset|${ kebabCase( presetCategory ) }|${ presetObject.slug }`;
+	return `var:preset|${ cssVarInfix }|${ presetObject.slug }`;
 }
 
 function getValueFromPresetVariable(
@@ -116,13 +136,13 @@ function getValueFromPresetVariable(
 	[ presetType, slug ]
 ) {
 	presetType = camelCase( presetType );
-	const presetData = PRESET_CATEGORIES[ presetType ];
+	const presetData = getPresetMetadataFromStyleProperty( presetType );
 	if ( ! presetData ) {
 		return variable;
 	}
 	const presets =
-		get( styles, [ blockName, 'settings', ...presetData.path ] ) ??
-		get( styles, [ GLOBAL_CONTEXT_NAME, 'settings', ...presetData.path ] );
+		get( styles, [ blockName, ...presetData.path ] ) ??
+		get( styles, [ ALL_BLOCKS_NAME, ...presetData.path ] );
 	if ( ! presets ) {
 		return variable;
 	}
@@ -130,8 +150,8 @@ function getValueFromPresetVariable(
 		return preset.slug === slug;
 	} );
 	if ( presetObject ) {
-		const { key } = presetData;
-		const result = presetObject[ key ];
+		const { valueKey } = presetData;
+		const result = presetObject[ valueKey ];
 		return getValueFromVariable( styles, blockName, result );
 	}
 	return variable;
@@ -140,7 +160,7 @@ function getValueFromPresetVariable(
 function getValueFromCustomVariable( styles, blockName, variable, path ) {
 	const result =
 		get( styles, [ blockName, 'settings', 'custom', ...path ] ) ??
-		get( styles, [ GLOBAL_CONTEXT_NAME, 'settings', 'custom', ...path ] );
+		get( styles, [ ALL_BLOCKS_NAME, 'settings', 'custom', ...path ] );
 	if ( ! result ) {
 		return variable;
 	}

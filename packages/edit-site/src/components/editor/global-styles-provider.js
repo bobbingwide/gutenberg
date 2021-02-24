@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { set, get, mapValues, mergeWith } from 'lodash';
+import { set, get, mergeWith } from 'lodash';
 
 /**
  * WordPress dependencies
@@ -13,28 +13,37 @@ import {
 	useEffect,
 	useMemo,
 } from '@wordpress/element';
-import { __EXPERIMENTAL_STYLE_PROPERTY as STYLE_PROPERTY } from '@wordpress/blocks';
+import {
+	__EXPERIMENTAL_STYLE_PROPERTY as STYLE_PROPERTY,
+	store as blocksStore,
+} from '@wordpress/blocks';
 import { useEntityProp } from '@wordpress/core-data';
 import { useSelect, useDispatch } from '@wordpress/data';
 
 /**
  * Internal dependencies
  */
-import { default as getGlobalStyles } from './global-styles-renderer';
 import {
-	GLOBAL_CONTEXT,
+	ALL_BLOCKS_NAME,
+	ALL_BLOCKS_SELECTOR,
+	ROOT_BLOCK_NAME,
+	ROOT_BLOCK_SELECTOR,
+	ROOT_BLOCK_SUPPORTS,
 	getValueFromVariable,
 	getPresetVariable,
 } from './utils';
+import getGlobalStyles from './global-styles-renderer';
+import { store as editSiteStore } from '../../store';
 
-const EMPTY_CONTENT = '{}';
+const EMPTY_CONTENT = { isGlobalStylesUserThemeJSON: true };
+const EMPTY_CONTENT_STRING = JSON.stringify( EMPTY_CONTENT );
 
 const GlobalStylesContext = createContext( {
 	/* eslint-disable no-unused-vars */
 	getSetting: ( context, path ) => {},
 	setSetting: ( context, path, newValue ) => {},
-	getStyleProperty: ( context, propertyName, origin ) => {},
-	setStyleProperty: ( context, propertyName, newValue ) => {},
+	getStyle: ( context, propertyName, origin ) => {},
+	setStyle: ( context, propertyName, newValue ) => {},
 	contexts: {},
 	/* eslint-enable no-unused-vars */
 } );
@@ -56,10 +65,10 @@ const useGlobalStylesEntityContent = () => {
 
 export const useGlobalStylesReset = () => {
 	const [ content, setContent ] = useGlobalStylesEntityContent();
-	const canRestart = !! content && content !== EMPTY_CONTENT;
+	const canRestart = !! content && content !== EMPTY_CONTENT_STRING;
 	return [
 		canRestart,
-		useCallback( () => setContent( EMPTY_CONTENT ), [ setContent ] ),
+		useCallback( () => setContent( EMPTY_CONTENT_STRING ), [ setContent ] ),
 	];
 };
 
@@ -75,7 +84,14 @@ const extractSupportKeys = ( supports ) => {
 
 const getContexts = ( blockTypes ) => {
 	const result = {
-		...GLOBAL_CONTEXT,
+		[ ROOT_BLOCK_NAME ]: {
+			selector: ROOT_BLOCK_SELECTOR,
+			supports: ROOT_BLOCK_SUPPORTS,
+		},
+		[ ALL_BLOCKS_NAME ]: {
+			selector: ALL_BLOCKS_SELECTOR,
+			supports: [], // by being an empty array, the styles subtree will be ignored
+		},
 	};
 
 	// Add contexts from block metadata.
@@ -118,16 +134,24 @@ export default function GlobalStylesProvider( { children, baseStyles } ) {
 	const [ content, setContent ] = useGlobalStylesEntityContent();
 	const { blockTypes, settings } = useSelect( ( select ) => {
 		return {
-			blockTypes: select( 'core/blocks' ).getBlockTypes(),
-			settings: select( 'core/edit-site' ).getSettings(),
+			blockTypes: select( blocksStore ).getBlockTypes(),
+			settings: select( editSiteStore ).getSettings(),
 		};
 	} );
-	const { updateSettings } = useDispatch( 'core/edit-site' );
+	const { updateSettings } = useDispatch( editSiteStore );
 
 	const contexts = useMemo( () => getContexts( blockTypes ), [ blockTypes ] );
 
 	const { userStyles, mergedStyles } = useMemo( () => {
-		const newUserStyles = content ? JSON.parse( content ) : {};
+		let newUserStyles = content ? JSON.parse( content ) : EMPTY_CONTENT;
+		// It is very important to verify if the flag isGlobalStylesUserThemeJSON is true.
+		// If it is not true the content was not escaped and is not safe.
+		if ( ! newUserStyles.isGlobalStylesUserThemeJSON ) {
+			newUserStyles = EMPTY_CONTENT;
+		}
+		// TODO: we probably want to check here that the shape is what we want
+		// This is, settings & styles are top-level keys, or perhaps a version.
+		// As to avoid merging trees that are different.
 		const newMergedStyles = mergeWith(
 			{},
 			baseStyles,
@@ -145,32 +169,33 @@ export default function GlobalStylesProvider( { children, baseStyles } ) {
 		() => ( {
 			contexts,
 			getSetting: ( context, path ) =>
-				get( userStyles?.[ context ]?.settings, path ),
+				get( userStyles?.settings?.[ context ], path ),
 			setSetting: ( context, path, newValue ) => {
 				const newContent = { ...userStyles };
-				let contextSettings = newContent?.[ context ]?.settings;
+				let contextSettings = newContent?.settings?.[ context ];
 				if ( ! contextSettings ) {
 					contextSettings = {};
-					set( newContent, [ context, 'settings' ], contextSettings );
+					set( newContent, [ 'settings', context ], contextSettings );
 				}
 				set( contextSettings, path, newValue );
 				setContent( JSON.stringify( newContent ) );
 			},
-			getStyleProperty: ( context, propertyName, origin = 'merged' ) => {
-				const styles = 'user' === origin ? userStyles : mergedStyles;
+			getStyle: ( context, propertyName, origin = 'merged' ) => {
+				const styleOrigin =
+					'user' === origin ? userStyles : mergedStyles;
 
 				const value = get(
-					styles?.[ context ]?.styles,
+					styleOrigin?.styles?.[ context ],
 					STYLE_PROPERTY[ propertyName ].value
 				);
 				return getValueFromVariable( mergedStyles, context, value );
 			},
-			setStyleProperty: ( context, propertyName, newValue ) => {
+			setStyle: ( context, propertyName, newValue ) => {
 				const newContent = { ...userStyles };
-				let contextStyles = newContent?.[ context ]?.styles;
+				let contextStyles = newContent?.styles?.[ context ];
 				if ( ! contextStyles ) {
 					contextStyles = {};
-					set( newContent, [ context, 'styles' ], contextStyles );
+					set( newContent, [ 'styles', context ], contextStyles );
 				}
 				set(
 					contextStyles,
@@ -200,15 +225,21 @@ export default function GlobalStylesProvider( { children, baseStyles } ) {
 					css: getGlobalStyles(
 						contexts,
 						mergedStyles,
-						STYLE_PROPERTY
+						'cssVariables'
+					),
+					isGlobalStyles: true,
+					__experimentalNoWrapper: true,
+				},
+				{
+					css: getGlobalStyles(
+						contexts,
+						mergedStyles,
+						'blockStyles'
 					),
 					isGlobalStyles: true,
 				},
 			],
-			__experimentalFeatures: mapValues(
-				mergedStyles,
-				( value ) => value?.settings || {}
-			),
+			__experimentalFeatures: mergedStyles.settings,
 		} );
 	}, [ contexts, mergedStyles ] );
 

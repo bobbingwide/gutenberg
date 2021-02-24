@@ -1,6 +1,7 @@
 /**
  * WordPress dependencies
  */
+import { useRef } from '@wordpress/element';
 import { useViewportMatch } from '@wordpress/compose';
 import {
 	BlockNavigationDropdown,
@@ -23,8 +24,10 @@ import UndoButton from './undo-redo/undo';
 import RedoButton from './undo-redo/redo';
 import DocumentActions from './document-actions';
 import TemplateDetails from '../template-details';
+import { store as editSiteStore } from '../../store';
 
 export default function Header( { openEntitiesSavedStates } ) {
+	const inserterButton = useRef();
 	const {
 		deviceType,
 		entityTitle,
@@ -36,39 +39,29 @@ export default function Header( { openEntitiesSavedStates } ) {
 		const {
 			__experimentalGetPreviewDeviceType,
 			isFeatureActive,
-			getTemplateId,
-			getTemplatePartId,
-			getTemplateType,
+			getEditedPostType,
+			getEditedPostId,
 			isInserterOpened,
-		} = select( 'core/edit-site' );
+		} = select( editSiteStore );
 		const { getEntityRecord } = select( 'core' );
 		const { __experimentalGetTemplateInfo: getTemplateInfo } = select(
 			'core/editor'
 		);
 
-		const _templateType = getTemplateType();
-		const _template = getEntityRecord(
-			'postType',
-			'wp_template',
-			getTemplateId()
-		);
-		const _templatePart = getEntityRecord(
-			'postType',
-			'wp_template_part',
-			getTemplatePartId()
-		);
-
+		const postType = getEditedPostType();
+		const postId = getEditedPostId();
+		const record = getEntityRecord( 'postType', postType, postId );
 		const _entityTitle =
-			'wp_template' === _templateType
-				? getTemplateInfo( _template ).title
-				: _templatePart?.slug;
+			'wp_template' === postType
+				? getTemplateInfo( record ).title
+				: record?.slug;
 
 		return {
 			deviceType: __experimentalGetPreviewDeviceType(),
 			entityTitle: _entityTitle,
 			hasFixedToolbar: isFeatureActive( 'fixedToolbar' ),
-			template: _template,
-			templateType: _templateType,
+			template: record,
+			templateType: postType,
 			isInserterOpen: isInserterOpened(),
 		};
 	}, [] );
@@ -76,7 +69,7 @@ export default function Header( { openEntitiesSavedStates } ) {
 	const {
 		__experimentalSetPreviewDeviceType: setPreviewDeviceType,
 		setIsInserterOpened,
-	} = useDispatch( 'core/edit-site' );
+	} = useDispatch( editSiteStore );
 
 	const isLargeViewport = useViewportMatch( 'medium' );
 	const displayBlockToolbar =
@@ -87,12 +80,21 @@ export default function Header( { openEntitiesSavedStates } ) {
 			<div className="edit-site-header_start">
 				<div className="edit-site-header__toolbar">
 					<Button
+						ref={ inserterButton }
 						isPrimary
 						isPressed={ isInserterOpen }
 						className="edit-site-header-toolbar__inserter-toggle"
-						onClick={ () =>
-							setIsInserterOpened( ! isInserterOpen )
-						}
+						onMouseDown={ ( event ) => {
+							event.preventDefault();
+						} }
+						onClick={ () => {
+							if ( isInserterOpen ) {
+								// Focusing the inserter button closes the inserter popover
+								inserterButton.current.focus();
+							} else {
+								setIsInserterOpened( true );
+							}
+						} }
 						icon={ plus }
 						label={ _x(
 							'Add block',

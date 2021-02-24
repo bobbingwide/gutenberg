@@ -1,13 +1,7 @@
 /**
  * External dependencies
  */
-import { omit, without, mapValues, isObject } from 'lodash';
-import memize from 'memize';
-
-/**
- * WordPress dependencies
- */
-import { createStoreAtom } from '@wordpress/stan';
+import { without, mapValues, isObject } from 'lodash';
 
 /**
  * Internal dependencies
@@ -54,8 +48,8 @@ import createCoreDataStore from './store';
  */
 export function createRegistry( storeConfigs = {}, parent = null ) {
 	const stores = {};
-	const storesAtoms = {};
 	let listeners = [];
+	const __experimentalListeningStores = new Set();
 
 	/**
 	 * Global listener called for each store's update.
@@ -80,12 +74,6 @@ export function createRegistry( storeConfigs = {}, parent = null ) {
 	};
 
 	/**
-	 * This is used to track the current atom resolver
-	 * and inject it into registry selectors.
-	 */
-	let currentAtomResolver;
-
-	/**
 	 * Calls a selector given the current state and extra arguments.
 	 *
 	 * @param {string|WPDataStore} storeNameOrDefinition Unique namespace identifier for the store
@@ -97,67 +85,21 @@ export function createRegistry( storeConfigs = {}, parent = null ) {
 		const storeName = isObject( storeNameOrDefinition )
 			? storeNameOrDefinition.name
 			: storeNameOrDefinition;
-
+		__experimentalListeningStores.add( storeName );
 		const store = stores[ storeName ];
 		if ( store ) {
-			// If it's not an atomic store subscribe to the store.
-			if (
-				! store.__internalIsAtomic &&
-				registry.__internalGetAtomResolver()
-			) {
-				registry.__internalGetAtomResolver()(
-					registry.__internalGetAtomForStore( storeName )
-				);
-			}
-
 			return store.getSelectors();
 		}
 
-		if ( parent ) {
-			return parent.select( storeName );
-		}
+		return parent && parent.select( storeName );
 	}
 
-	const getResolveSelectors = memize(
-		( selectors ) => {
-			return mapValues(
-				omit( selectors, [
-					'getIsResolving',
-					'hasStartedResolution',
-					'hasFinishedResolution',
-					'isResolving',
-					'getCachedResolvers',
-				] ),
-				( selector, selectorName ) => {
-					return ( ...args ) => {
-						return new Promise( ( resolve ) => {
-							const hasFinished = () =>
-								selectors.hasFinishedResolution(
-									selectorName,
-									args
-								);
-							const getResult = () =>
-								selector.apply( null, args );
-
-							// trigger the selector (to trigger the resolver)
-							const result = getResult();
-							if ( hasFinished() ) {
-								return resolve( result );
-							}
-
-							const unsubscribe = subscribe( () => {
-								if ( hasFinished() ) {
-									unsubscribe();
-									resolve( getResult() );
-								}
-							} );
-						} );
-					};
-				}
-			);
-		},
-		{ maxSize: 1 }
-	);
+	function __experimentalMarkListeningStores( callback, ref ) {
+		__experimentalListeningStores.clear();
+		const result = callback.call( this );
+		ref.current = Array.from( __experimentalListeningStores );
+		return result;
+	}
 
 	/**
 	 * Given the name of a registered store, returns an object containing the store's
@@ -165,13 +107,22 @@ export function createRegistry( storeConfigs = {}, parent = null ) {
 	 * and modified so that they return promises that resolve to their eventual values,
 	 * after any resolvers have ran.
 	 *
-	 * @param {string|Object} storeName Unique namespace identifier for the store
-	 *                                  or the store definition.
+	 * @param {string|WPDataStore} storeNameOrDefinition Unique namespace identifier for the store
+	 *                                                   or the store definition.
 	 *
 	 * @return {Object} Each key of the object matches the name of a selector.
 	 */
-	function __experimentalResolveSelect( storeName ) {
-		return getResolveSelectors( select( storeName ) );
+	function resolveSelect( storeNameOrDefinition ) {
+		const storeName = isObject( storeNameOrDefinition )
+			? storeNameOrDefinition.name
+			: storeNameOrDefinition;
+		__experimentalListeningStores.add( storeName );
+		const store = stores[ storeName ];
+		if ( store ) {
+			return store.getResolveSelectors();
+		}
+
+		return parent && parent.resolveSelect( storeName );
 	}
 
 	/**
@@ -226,12 +177,6 @@ export function createRegistry( storeConfigs = {}, parent = null ) {
 			throw new TypeError( 'config.subscribe must be a function' );
 		}
 		stores[ key ] = config;
-		storesAtoms[ key ] = createStoreAtom(
-			config.subscribe,
-			() => null,
-			() => {},
-			{ id: key }
-		);
 		config.subscribe( globalListener );
 	}
 
@@ -244,13 +189,27 @@ export function createRegistry( storeConfigs = {}, parent = null ) {
 		registerGenericStore( store.name, store.instantiate( registry ) );
 	}
 
-	function __internalGetAtomForStore( key ) {
-		const atom = storesAtoms[ key ];
-		if ( atom ) {
-			return atom;
+	/**
+	 * Subscribe handler to a store.
+	 *
+	 * @param {string[]} storeName The store name.
+	 * @param {Function} handler   The function subscribed to the store.
+	 * @return {Function} A function to unsubscribe the handler.
+	 */
+	function __experimentalSubscribeStore( storeName, handler ) {
+		if ( storeName in stores ) {
+			return stores[ storeName ].subscribe( handler );
 		}
 
-		return parent.__internalGetAtomForStore( key );
+		// Trying to access a store that hasn't been registered,
+		// this is a pattern rarely used but seen in some places.
+		// We fallback to regular `subscribe` here for backward-compatibility for now.
+		// See https://github.com/WordPress/gutenberg/pull/27466 for more info.
+		if ( ! parent ) {
+			return subscribe( handler );
+		}
+
+		return parent.__experimentalSubscribeStore( storeName, handler );
 	}
 
 	let registry = {
@@ -259,20 +218,12 @@ export function createRegistry( storeConfigs = {}, parent = null ) {
 		namespaces: stores, // TODO: Deprecate/remove this.
 		subscribe,
 		select,
-		__experimentalResolveSelect,
+		resolveSelect,
 		dispatch,
 		use,
 		register,
-		__internalGetAtomForStore,
-		__internalGetAtomResolver() {
-			return currentAtomResolver;
-		},
-		__internalSetAtomResolver( resolver ) {
-			if ( parent ) {
-				parent.__internalSetAtomResolver( resolver );
-			}
-			currentAtomResolver = resolver;
-		},
+		__experimentalMarkListeningStores,
+		__experimentalSubscribeStore,
 	};
 
 	/**

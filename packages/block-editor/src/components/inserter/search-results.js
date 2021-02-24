@@ -28,26 +28,24 @@ import { searchBlockItems, searchItems } from './search-items';
 function InserterSearchResults( {
 	filterValue,
 	onSelect,
+	onHover,
 	rootClientId,
 	clientId,
 	isAppender,
-	selectBlockOnInsert,
 	maxBlockPatterns,
 	maxBlockTypes,
 	showBlockDirectory = false,
+	isDraggable = true,
+	shouldFocusBlock = true,
 } ) {
 	const debouncedSpeak = useDebounce( speak, 500 );
 
-	const [
-		destinationRootClientId,
-		onInsertBlocks,
-		onToggleInsertionPoint,
-	] = useInsertionPoint( {
+	const [ destinationRootClientId, onInsertBlocks ] = useInsertionPoint( {
 		onSelect,
 		rootClientId,
 		clientId,
 		isAppender,
-		selectBlockOnInsert,
+		shouldFocusBlock,
 	} );
 	const [
 		blockTypes,
@@ -56,7 +54,8 @@ function InserterSearchResults( {
 		onSelectBlockType,
 	] = useBlockTypesState( destinationRootClientId, onInsertBlocks );
 	const [ patterns, , onSelectBlockPattern ] = usePatternsState(
-		onInsertBlocks
+		onInsertBlocks,
+		destinationRootClientId
 	);
 
 	const filteredBlockTypes = useMemo( () => {
@@ -117,8 +116,9 @@ function InserterSearchResults( {
 					<BlockTypesList
 						items={ filteredBlockTypes }
 						onSelect={ onSelectBlockType }
-						onHover={ onToggleInsertionPoint }
+						onHover={ onHover }
 						label={ __( 'Blocks' ) }
+						isDraggable={ isDraggable }
 					/>
 				</InserterPanel>
 			) }
@@ -141,6 +141,7 @@ function InserterSearchResults( {
 							shownPatterns={ currentShownPatterns }
 							blockPatterns={ filteredBlockPatterns }
 							onClickPattern={ onSelectBlockPattern }
+							isDraggable={ isDraggable }
 						/>
 					</div>
 				</InserterPanel>
@@ -150,9 +151,10 @@ function InserterSearchResults( {
 				<__experimentalInserterMenuExtension.Slot
 					fillProps={ {
 						onSelect: onSelectBlockType,
-						onHover: onToggleInsertionPoint,
+						onHover,
 						filterValue,
 						hasItems,
+						rootClientId: destinationRootClientId,
 					} }
 				>
 					{ ( fills ) => {
